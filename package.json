@@ -1,41 +1,38 @@
 {
-  "name": "ebml-stream",
-  "version": "1.0.3",
-  "description": "Ebml parser and encoder",
+  "name": "ebml-web-stream",
+  "version": "1.0.0-alpha.1",
+  "description": "EBML stream parser for Node and Web",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
   "maintainers": [
-    "Austin Blake <austin.leroy@hotmail.com>"
+    "Liam Dyer <liamcdyer@gmail.com>"
   ],
   "directories": {
     "lib": "lib"
   },
   "scripts": {
-    "pretest": "tsc --project tsconfig.test.json",
-    "test": "ts-node node_modules/jasmine/bin/jasmine",
+    "test": "vitest",
     "build": "tsc",
-    "prepare": "npm run build",
     "prepublishOnly": "NODE_ENV=production npm run build"
   },
-  "repository": "github:austinleroy/node-ebml",
+  "repository": "github:saghen/ebml-web-stream",
   "engines": {
-    "node": ">= 10.10.0"
+    "node": ">= 16.0.0"
   },
   "keywords": [
     "ebml",
     "webm",
     "mkv",
     "matroska",
-    "format"
+    "format",
+    "stream",
+    "web",
+    "node"
   ],
-  "dependencies": {},
   "devDependencies": {
-    "@types/jasmine": "^2.8.8",
-    "@types/node": "^10.10.1",
-    "jasmine": "^3.2.0",
-    "rimraf": "^2.6.2",
-    "ts-node": "^7.0.1",
-    "typescript": "^3.0.3"
+    "@types/node": "^18.11.18",
+    "typescript": "^4.9.4",
+    "vitest": "^0.28.1"
   },
   "contributors": [
     "Austin Blake <austin.leroy@hotmail.com>",
@@ -43,6 +40,7 @@
     "Davy Van Deursen <d.vandeursen@evs.com>",
     "Ed Markowski <siphon@protonmail.com>",
     "Jonathan Sifuentes <jayands.dev@gmail.com>",
+    "Liam Dyer <liamcdyer@gmail.com>",
     "Manuel Wiedenmann <manuel@funkensturm.de>",
     "Mathias Buus <mathiasbuus@gmail.com>",
     "Max Ogden <max@maxogden.com>",
@@ -51,7 +49,7 @@
   ],
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/austinleroy/node-ebml/issues"
+    "url": "https://github.com/saghen/ebml-web-stream/issues"
   },
-  "homepage": "https://github.com/austinleroy/node-ebml#readme"
+  "homepage": "https://github.com/saghen/ebml-web-stream#readme"
 }

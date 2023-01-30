@@ -1,4 +1,3 @@
-export { Tools } from './tools';
 export { EbmlStreamDecoder } from './EbmlStreamDecoder';
 export { EbmlStreamEncoder } from './EbmlStreamEncoder';
 export { Block } from './models/tags/Block';

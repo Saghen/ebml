@@ -1,25 +1,13 @@
 {
-  "include": [
-    "src/**/*.ts"
-  ],
+  "include": ["src/**/*.ts"],
   "compilerOptions": {
-    "target": "es6", 
-    "module": "commonjs", 
+    "strict": true,
+    "target": "ES2022",
+    "module": "ES2022",
     "declaration": true,
-    "outDir": "./lib", 
-    "rootDir": "./src", 
-    "removeComments": true,
-    "strict": false,
-    "noImplicitAny": true,
-    "noImplicitThis": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "moduleResolution": "node", 
-    "types": [
-      "node"
-    ],
+    "outDir": "./lib",
+    "rootDir": "./src",
+    "moduleResolution": "node",
     "esModuleInterop": true
   }
 }

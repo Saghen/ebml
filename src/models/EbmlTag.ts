@@ -1,56 +1,37 @@
-import { EbmlTagPosition } from "./enums/EbmlTagPosition";
-import { EbmlTagId } from "./enums/EbmlTagId";
-import { EbmlElementType } from "./enums/EbmlElementType";
-import { Tools } from "../tools";
+import { EbmlTagPosition } from './enums/EbmlTagPosition'
+import { EbmlTagId } from './enums/EbmlTagId'
+import { EbmlElementType } from './enums/EbmlElementType'
+import { concatArrayBuffers, hexStringToBuf, writeVint } from '../tools'
 
 export abstract class EbmlTag {
-    
-    size: number;
+  size: number = 0
 
-    // level: number;
-    // minver: number;
-    // description: string;
+  constructor(public id: number, public type: EbmlElementType, public position: EbmlTagPosition) {}
 
-    constructor(
-        public id: number,
-        public type: EbmlElementType,
-        public position: EbmlTagPosition
-    ) {
+  protected abstract encodeContent(): ArrayBuffer
+
+  public abstract parseContent(content: ArrayBuffer): void
+
+  private getTagDeclaration(): ArrayBuffer {
+    let tagHex = this.id.toString(16)
+    if (tagHex.length % 2 !== 0) {
+      tagHex = `0${tagHex}`
     }
+    return hexStringToBuf(tagHex)
+  }
 
-    protected abstract encodeContent(): Buffer;
+  public encode(): ArrayBuffer {
+    const content = this.encodeContent()
 
-    public abstract parseContent(content: Buffer): void;
-
-    private getTagDeclaration(): Buffer {
-        let tagHex = this.id.toString(16);
-        if(tagHex.length%2!==0) {
-            tagHex = `0${tagHex}`;
-        }
-        return Buffer.from(tagHex, 'hex');
+    if (this.size === -1) {
+      const vintSize = hexStringToBuf('01ffffffffffffff')
+      return concatArrayBuffers(this.getTagDeclaration(), vintSize, content)
     }
+    const isSegment = this.id === EbmlTagId.Segment
+    const isCluster = this.id === EbmlTagId.Cluster
+    const specialLength: number = isSegment || isCluster ? 8 : 0
+    const vintSize = writeVint(content.byteLength, specialLength)
 
-    public encode(): Buffer {
-        let vintSize = null;
-        let content = this.encodeContent();
-
-        if(this.size === -1) {
-            vintSize = Buffer.from('01ffffffffffffff', 'hex');
-        } else {
-            let specialLength: number = undefined;
-            if([
-                EbmlTagId.Segment,
-                EbmlTagId.Cluster
-            ].some(i => i === this.id)) {
-                specialLength = 8;
-            }
-            vintSize = Tools.writeVint(content.length, specialLength);
-        }
-        
-        return Buffer.concat([
-            this.getTagDeclaration(),
-            vintSize,
-            content
-        ]);
-    }
+    return concatArrayBuffers(this.getTagDeclaration(), vintSize, content)
+  }
 }

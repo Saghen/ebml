@@ -1,113 +1,110 @@
-import { Transform, TransformOptions, TransformCallback } from 'stream';
-import { Tools as tools } from './tools';
-import { EbmlTag } from './models/EbmlTag';
-import { EbmlElementType } from './models/enums/EbmlElementType';
-import { EbmlTagPosition } from './models/enums/EbmlTagPosition';
-import { EbmlTagFactory } from './models/EbmlTagFactory';
-import { EbmlTagId } from './models/enums/EbmlTagId';
+import { readVint, readHexString, concatArrayBuffers } from './tools'
+import { EbmlTag } from './models/EbmlTag'
+import { EbmlElementType } from './models/enums/EbmlElementType'
+import { EbmlTagPosition } from './models/enums/EbmlTagPosition'
+import { EbmlTagFactory } from './models/EbmlTagFactory'
+import { EbmlTagId } from './models/enums/EbmlTagId'
+import { EbmlMasterTag } from './models/tags/EbmlMasterTag'
+import { EbmlDataTag } from './models/tags/EbmlDataTag'
 
-export class EbmlStreamDecoderOptions {
-  bufferTagIds?: EbmlTagId[] = [];
+export type EbmlStreamDecoderOptions = {
+  bufferTagIds?: EbmlTagId[]
 }
 
-export class EbmlStreamDecoder extends Transform {
-  private _currentBufferOffset: number = 0;
-  private _tagStack: ProcessingTag[] = [];
-  private _buffer: Buffer = Buffer.alloc(0);
-  private _bufferTagIds: EbmlTagId[] = [];
+function getTransformer(
+  options?: EbmlStreamDecoderOptions
+): Transformer<ArrayBuffer, EbmlTag> & { getBuffer(): ArrayBuffer } {
+  let currentBufferOffset = 0
+  const tagStack: ProcessingTag[] = []
+  let buffer: ArrayBuffer = new ArrayBuffer(0)
+  const _bufferTagIds: EbmlTagId[] = options?.bufferTagIds ?? []
 
-  /* Expose property for testing */
-  get buffer(): Buffer {
-    return this._buffer;
+  const advanceBuffer = (length: number): void => {
+    currentBufferOffset += length
+    buffer = buffer.slice(length)
   }
 
-  constructor(options: TransformOptions & EbmlStreamDecoderOptions = {}) {
-    super(<TransformOptions>{ ...options, readableObjectMode: true });
-    this._bufferTagIds = options.bufferTagIds || [];
-  }
-// @ts-ignore
-  _transform(chunk: any, enc: string, done: TransformCallback): void {
-    this._buffer = Buffer.concat([this._buffer, Buffer.from(chunk)]);
-    while(this.parseTags());
-    done();
-  }
+  const readTagHeader = (buffer: ArrayBuffer, offset: number = 0): ProcessingTag | undefined => {
+    if (buffer.byteLength === 0) return
 
-  private parseTags(): boolean {
-    const currentTag = this.readTagHeader(this._buffer);
-    if(!currentTag) {
-      return false;
-    }
+    const tag = readVint(buffer, offset)
+    if (!tag) return
+    const size = readVint(buffer, offset + tag.length)
+    if (!size) return
 
-    if(currentTag.type === EbmlElementType.Master && !this._bufferTagIds.some(i => i ===currentTag.id)) {
-      this._tagStack.push(currentTag);
-      this.emitTag(currentTag, EbmlTagPosition.Start);
-      this.advanceBuffer(currentTag.tagHeaderLength);
-      return true;
-    } else {
-      if(this._buffer.length < currentTag.tagHeaderLength + currentTag.size) {
-        return false;
-      }
+    const tagIdHex = readHexString(new Uint8Array(buffer), offset, offset + tag.length)
+    const tagId = Number.parseInt(tagIdHex, 16)
+    const tagObject = EbmlTagFactory.create(tagId)
 
-      const data = this._buffer.slice(currentTag.tagHeaderLength, currentTag.tagHeaderLength+ currentTag.size);
-      this.emitTag(currentTag, EbmlTagPosition.Content, data);
-      this.advanceBuffer(currentTag.tagHeaderLength + currentTag.size);
+    tagObject.size = size.value
 
-      while (this._tagStack.length > 0) {
-        const nextTag = this._tagStack[this._tagStack.length - 1];
-        if (this._currentBufferOffset < (nextTag.absoluteStart + nextTag.tagHeaderLength + nextTag.size)) {
-          break;
-        }
-        this.emitTag(nextTag, EbmlTagPosition.End);
-        this._tagStack.pop();
-      }
-    }
-
-    return true;
-  }
-
-  private advanceBuffer(length: number): void {
-      this._currentBufferOffset += length;
-      this._buffer = this._buffer.slice(length);
-  }
-
-  private readTagHeader(buffer: Buffer, offset: number = 0): ProcessingTag {
-    if (buffer.length == 0) {
-      return null;
-    }
-    const tag = tools.readVint(buffer, offset);
-    if (tag == null) {
-      return null;
-    }
-    const size = tools.readVint(buffer, offset + tag.length);
-    if(size == null) {
-      return null;
-    }
-
-    const tagIdHex = tools.readHexString(buffer, offset, offset + tag.length)
-    const tagId = Number.parseInt(tagIdHex, 16);
-    let tagObject = EbmlTagFactory.create(tagId);
-
-    tagObject.size = size.value;
-    
     return Object.assign(tagObject, {
-      absoluteStart: this._currentBufferOffset + offset,
-      tagHeaderLength: tag.length + size.length
-    });
+      absoluteStart: currentBufferOffset + offset,
+      tagHeaderLength: tag.length + size.length,
+    })
   }
 
-  private emitTag(tag: ProcessingTag, position: EbmlTagPosition, data?: Buffer): void {
-    let emittedTag = EbmlTagFactory.create(tag.id);
-    emittedTag.size = tag.size;
-    emittedTag.position = position;
-    if(position === EbmlTagPosition.Content) {
-      emittedTag.parseContent(data);
+  const makeTag = (processingTag: ProcessingTag, position: EbmlTagPosition, data?: ArrayBuffer): EbmlTag => {
+    const tag: EbmlTag = EbmlTagFactory.create(processingTag.id)
+    tag.size = processingTag.size
+    tag.position = position
+    if (position === EbmlTagPosition.Content) {
+      if (data === undefined) throw Error('Data must be provided when position is of type Content')
+      tag.parseContent(data)
     }
-    this.push(emittedTag);
+    return tag
   }
 
+  return {
+    start() {
+      buffer = new ArrayBuffer(0)
+      currentBufferOffset = 0
+    },
+    transform(chunk, controller): void {
+      buffer = concatArrayBuffers(buffer, chunk)
+
+      while (true) {
+        const currentTag = readTagHeader(buffer)
+        if (!currentTag) break
+
+        if (currentTag.type === EbmlElementType.Master && !_bufferTagIds.some((i) => i === currentTag.id)) {
+          tagStack.push(currentTag)
+          controller.enqueue(makeTag(currentTag, EbmlTagPosition.Start))
+          advanceBuffer(currentTag.tagHeaderLength)
+          continue
+        }
+        if (buffer.byteLength < currentTag.tagHeaderLength + currentTag.size ?? 0) break
+
+        const data = buffer.slice(currentTag.tagHeaderLength, currentTag.tagHeaderLength + currentTag.size)
+        controller.enqueue(makeTag(currentTag, EbmlTagPosition.Content, data))
+        advanceBuffer(currentTag.tagHeaderLength + currentTag.size)
+
+        while (tagStack.length > 0) {
+          const nextTag = tagStack[tagStack.length - 1]
+          if (currentBufferOffset < nextTag.absoluteStart + nextTag.tagHeaderLength + nextTag.size) {
+            break
+          }
+          controller.enqueue(makeTag(nextTag, EbmlTagPosition.End))
+          tagStack.pop()
+        }
+      }
+    },
+    getBuffer() {
+      return buffer
+    },
+  }
+}
+
+export class EbmlStreamDecoder extends TransformStream<ArrayBuffer, EbmlMasterTag | EbmlDataTag> {
+  getBuffer: () => ArrayBuffer
+  constructor(options?: EbmlStreamDecoderOptions) {
+    const transformer = getTransformer(options)
+    super(transformer)
+    this.getBuffer = transformer.getBuffer
+  }
 }
 
 type ProcessingTag = EbmlTag & {
-  absoluteStart: number;
-  tagHeaderLength: number;
-};
+  absoluteStart: number
+  tagHeaderLength: number
+}

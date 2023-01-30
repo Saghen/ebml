@@ -30,7 +30,8 @@ function getTransformer(): Transformer<EbmlTag, ArrayBuffer> & {
         if (openTags.length > 0) {
           openTags[openTags.length - 1].Children.push(tag)
         }
-        openTags.push(tag)
+        // TODO: Typing
+        openTags.push(tag as EbmlMasterTag)
       }
       else if (tag.position === EbmlTagPosition.Content) {
         if (openTags.length === 0) {
